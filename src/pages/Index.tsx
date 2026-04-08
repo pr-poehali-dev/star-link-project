@@ -1,13 +1,147 @@
 import { ShimmerButton } from "@/components/shimmer-button"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import Icon from "@/components/ui/icon"
 
 const CAR_IMG = "https://cdn.poehali.dev/projects/d3e4f3fa-87ba-402e-ad3e-ef01b3f29dd0/files/30ab6287-ff43-487e-aeb3-7fd16a81458b.jpg"
 const GIRL_IMG = "https://cdn.poehali.dev/projects/d3e4f3fa-87ba-402e-ad3e-ef01b3f29dd0/files/6e3f43fc-06f1-4023-9063-21f8274cb960.jpg"
 const MONEY_IMG = "https://cdn.poehali.dev/projects/d3e4f3fa-87ba-402e-ad3e-ef01b3f29dd0/files/2b685880-1182-4f81-9662-6afe09472b17.jpg"
 
+// Точные точки контура BMW M3 по фото (viewBox 600x400, машина ~центр)
+// Обведены вручную по реальному силуэту: нос слева, корма справа
+const BMW_CONTOUR: [number, number][] = [
+  // Нос / передний бампер (левый нижний угол)
+  [42, 310], [38, 295], [36, 278], [38, 262], [44, 248],
+  // Передняя часть капота — подъём
+  [55, 238], [68, 228], [84, 220], [102, 213],
+  // Капот горизонталь
+  [124, 208], [148, 204], [168, 200],
+  // Стойка А — лобовое стекло
+  [182, 196], [192, 184], [204, 168], [216, 152],
+  // Крыша
+  [234, 138], [258, 128], [290, 122], [324, 120],
+  [354, 122], [378, 126],
+  // Стойка С — заднее стекло (купе, крутой угол)
+  [396, 132], [410, 146], [422, 164], [430, 182],
+  // Задняя часть крыши / крышка багажника
+  [438, 196], [448, 210], [456, 224],
+  // Задний бампер / корма
+  [466, 236], [476, 250], [482, 264], [484, 280],
+  [482, 296], [476, 308], [466, 316],
+  // Задняя арка — внешний контур
+  [452, 320], [436, 322],
+  // Низ задней арки
+  [420, 328], [406, 330],
+  // Порог между арками
+  [390, 328], [360, 326], [330, 326], [300, 326],
+  [270, 326], [240, 326], [210, 328],
+  // Передняя арка — внешний контур
+  [194, 330], [178, 328], [162, 322],
+  [148, 316], [136, 308],
+  // Возврат к носу по нижней линии
+  [120, 318], [100, 318], [78, 316],
+  [60, 314], [48, 312], [42, 310],
+]
+
 export default function Index() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    let raf: number
+    let progress = 0
+
+    const TRAIL = 28   // кол-во точек хвоста
+    const SPEED = 0.6  // точек за кадр
+
+    const resize = () => {
+      const img = imgRef.current
+      if (!img || !img.naturalWidth) return
+      canvas.width = img.offsetWidth
+      canvas.height = img.offsetHeight
+    }
+
+    const imgEl = imgRef.current
+    if (imgEl?.complete) resize()
+    else imgEl?.addEventListener("load", resize)
+    window.addEventListener("resize", resize)
+
+    // Масштабируем контур под текущий размер canvas
+    const getScaled = () => {
+      const w = canvas.width || 600
+      const h = canvas.height || 400
+      return BMW_CONTOUR.map(([x, y]) => [
+        (x / 600) * w,
+        (y / 400) * h,
+      ] as [number, number])
+    }
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      const pts = getScaled()
+      const n = pts.length
+
+      // Тонкий базовый контур
+      ctx.beginPath()
+      ctx.moveTo(pts[0][0], pts[0][1])
+      for (let i = 1; i < n; i++) ctx.lineTo(pts[i][0], pts[i][1])
+      ctx.closePath()
+      ctx.strokeStyle = "rgba(180,80,255,0.12)"
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+
+      // Хвост огонька
+      const head = Math.floor(progress) % n
+      for (let t = 0; t < TRAIL; t++) {
+        const idx = (head - t + n * 10) % n
+        const [x, y] = pts[idx]
+        const frac = 1 - t / TRAIL          // 1 у головы → 0 у хвоста
+        const alpha = frac * frac * 0.85
+        const r = 180 + Math.round(75 * frac)
+        const g = 60 + Math.round(40 * frac)
+        const b = 255
+        const size = 1.2 + frac * 3.5
+
+        ctx.beginPath()
+        ctx.arc(x, y, size, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`
+        ctx.fill()
+      }
+
+      // Яркая голова
+      const [hx, hy] = pts[head]
+      const grd = ctx.createRadialGradient(hx, hy, 0, hx, hy, 18)
+      grd.addColorStop(0, "rgba(255,240,255,1)")
+      grd.addColorStop(0.3, "rgba(210,120,255,0.9)")
+      grd.addColorStop(0.7, "rgba(160,60,255,0.4)")
+      grd.addColorStop(1, "rgba(120,0,220,0)")
+      ctx.beginPath()
+      ctx.arc(hx, hy, 18, 0, Math.PI * 2)
+      ctx.fillStyle = grd
+      ctx.fill()
+
+      // Белое ядро
+      ctx.beginPath()
+      ctx.arc(hx, hy, 3, 0, Math.PI * 2)
+      ctx.fillStyle = "white"
+      ctx.fill()
+
+      progress = (progress + SPEED) % n
+      raf = requestAnimationFrame(draw)
+    }
+
+    draw()
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener("resize", resize)
+      imgEl?.removeEventListener("load", resize)
+    }
+  }, [])
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-black">
@@ -187,9 +321,10 @@ export default function Index() {
             </div>
           </div>
 
-          {/* BMW M3 — center, SVG contour overlay */}
+          {/* BMW M3 — center, canvas contour overlay */}
           <div className="relative mx-auto" style={{ width: "68%", maxWidth: 600, marginLeft: "auto", marginRight: "auto" }}>
             <img
+              ref={imgRef}
               src={CAR_IMG}
               alt="BMW M3"
               className="w-full h-auto rounded-2xl"
@@ -198,220 +333,12 @@ export default function Index() {
                 filter: "brightness(0.95) saturate(1.1)",
               }}
             />
-            {/* SVG running light animation along car contour */}
-            <svg
-              viewBox="0 0 600 380"
-              className="absolute inset-0 w-full h-full pointer-events-none"
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full rounded-2xl pointer-events-none"
               style={{ mixBlendMode: "screen" }}
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <defs>
-                <filter id="carGlow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="4" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-                <filter id="carGlowStrong" x="-50%" y="-50%" width="200%" height="200%">
-                  <feGaussianBlur stdDeviation="8" result="blur" />
-                  <feMerge>
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="blur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
+            />
 
-              {/*
-                BMW M3 (E92/F80 купе, вид сбоку справа налево)
-                Изображение: тёмный фон, машина занимает ~80% ширины и ~70% высоты,
-                расположена по центру. viewBox 600x380.
-                Ключевые точки:
-                  - передний бампер (нос): x≈60, y≈290
-                  - капот поднимается к лобовому: x≈60→180, y≈290→195
-                  - лобовое стекло (наклон назад): x≈180→250, y≈195→130
-                  - крыша (горизонт): x≈250→370, y≈130→132
-                  - заднее стекло (крутой спуск купе): x≈370→430, y≈132→210
-                  - крышка багажника: x≈430→510, y≈210→255
-                  - задний бампер: x≈510→540, y≈255→295
-                  - днище: x≈540→60, y≈295
-                  - передняя арка: центр x≈145, y≈295 r≈38
-                  - задняя арка: центр x≈430, y≈295 r≈42
-              */}
-
-              {/* Контур кузова без колёс */}
-              <path
-                id="carContour"
-                d="
-                  M 62 285
-                  C 60 270, 62 255, 68 242
-                  C 74 228, 84 218, 96 208
-                  C 110 197, 126 192, 142 189
-                  L 148 188
-                  C 155 187, 160 183, 165 178
-                  C 175 165, 185 148, 200 136
-                  C 212 126, 226 120, 242 117
-                  L 268 113
-                  L 340 111
-                  L 370 113
-                  C 380 115, 388 120, 394 128
-                  C 406 143, 415 162, 424 178
-                  C 428 186, 433 192, 440 197
-                  L 458 205
-                  C 476 213, 492 222, 504 234
-                  C 514 244, 520 256, 524 268
-                  L 528 285
-                  L 524 295
-                  C 520 300, 514 303, 508 304
-                  L 492 305
-                  C 486 286, 474 270, 456 265
-                  C 444 261, 432 261, 420 265
-                  C 402 270, 390 285, 387 302
-                  L 386 305
-                  L 214 305
-                  L 213 302
-                  C 210 285, 198 270, 180 265
-                  C 168 261, 156 261, 144 265
-                  C 126 270, 114 286, 111 305
-                  L 96 304
-                  C 88 303, 80 299, 74 293
-                  Z
-                "
-                fill="none"
-                stroke="rgba(180,80,255,0.18)"
-                strokeWidth="1.5"
-              />
-
-              {/* Передняя арка колеса */}
-              <path
-                id="frontWheelArch"
-                d="M 111 305 C 111 268, 134 248, 162 248 C 190 248, 213 268, 213 305"
-                fill="none"
-                stroke="rgba(180,80,255,0.18)"
-                strokeWidth="1.5"
-              />
-
-              {/* Задняя арка колеса */}
-              <path
-                id="rearWheelArch"
-                d="M 386 305 C 386 266, 410 245, 440 245 C 470 245, 492 266, 492 305"
-                fill="none"
-                stroke="rgba(180,80,255,0.18)"
-                strokeWidth="1.5"
-              />
-
-              {/* === АНИМАЦИЯ — полный контур одним путём === */}
-              {/* Хвост (trail) */}
-              <path
-                id="fullContour"
-                d="
-                  M 62 285
-                  C 60 270, 62 255, 68 242
-                  C 74 228, 84 218, 96 208
-                  C 110 197, 126 192, 142 189
-                  L 148 188
-                  C 155 187, 160 183, 165 178
-                  C 175 165, 185 148, 200 136
-                  C 212 126, 226 120, 242 117
-                  L 268 113
-                  L 340 111
-                  L 370 113
-                  C 380 115, 388 120, 394 128
-                  C 406 143, 415 162, 424 178
-                  C 428 186, 433 192, 440 197
-                  L 458 205
-                  C 476 213, 492 222, 504 234
-                  C 514 244, 520 256, 524 268
-                  L 528 285
-                  L 524 295
-                  C 520 300, 514 303, 508 304
-                  L 492 305
-                  C 486 286, 474 270, 456 265
-                  C 444 261, 432 261, 420 265
-                  C 402 270, 390 285, 387 302
-                  L 386 305
-                  L 214 305
-                  L 213 302
-                  C 210 285, 198 270, 180 265
-                  C 168 261, 156 261, 144 265
-                  C 126 270, 114 286, 111 305
-                  L 96 304
-                  C 88 303, 80 299, 74 293
-                  Z
-                "
-                fill="none"
-                stroke="rgba(200,120,255,0.55)"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeDasharray="80 9999"
-                strokeDashoffset="0"
-                filter="url(#carGlow)"
-              >
-                <animate
-                  attributeName="stroke-dashoffset"
-                  from="0"
-                  to="-1600"
-                  dur="3.5s"
-                  repeatCount="indefinite"
-                />
-              </path>
-
-              {/* Яркая голова огонька */}
-              <path
-                d="
-                  M 62 285
-                  C 60 270, 62 255, 68 242
-                  C 74 228, 84 218, 96 208
-                  C 110 197, 126 192, 142 189
-                  L 148 188
-                  C 155 187, 160 183, 165 178
-                  C 175 165, 185 148, 200 136
-                  C 212 126, 226 120, 242 117
-                  L 268 113
-                  L 340 111
-                  L 370 113
-                  C 380 115, 388 120, 394 128
-                  C 406 143, 415 162, 424 178
-                  C 428 186, 433 192, 440 197
-                  L 458 205
-                  C 476 213, 492 222, 504 234
-                  C 514 244, 520 256, 524 268
-                  L 528 285
-                  L 524 295
-                  C 520 300, 514 303, 508 304
-                  L 492 305
-                  C 486 286, 474 270, 456 265
-                  C 444 261, 432 261, 420 265
-                  C 402 270, 390 285, 387 302
-                  L 386 305
-                  L 214 305
-                  L 213 302
-                  C 210 285, 198 270, 180 265
-                  C 168 261, 156 261, 144 265
-                  C 126 270, 114 286, 111 305
-                  L 96 304
-                  C 88 303, 80 299, 74 293
-                  Z
-                "
-                fill="none"
-                stroke="rgba(255,240,255,1)"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray="10 9999"
-                strokeDashoffset="0"
-                filter="url(#carGlowStrong)"
-              >
-                <animate
-                  attributeName="stroke-dashoffset"
-                  from="0"
-                  to="-1600"
-                  dur="3.5s"
-                  repeatCount="indefinite"
-                />
-              </path>
-            </svg>
           </div>
 
           {/* Money fan — right side */}
