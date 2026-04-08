@@ -1,5 +1,5 @@
 import { ShimmerButton } from "@/components/shimmer-button"
-import { useState, useEffect, useRef } from "react"
+import { useState } from "react"
 import Icon from "@/components/ui/icon"
 
 const CAR_IMG = "https://cdn.poehali.dev/projects/d3e4f3fa-87ba-402e-ad3e-ef01b3f29dd0/files/30ab6287-ff43-487e-aeb3-7fd16a81458b.jpg"
@@ -8,172 +8,6 @@ const MONEY_IMG = "https://cdn.poehali.dev/projects/d3e4f3fa-87ba-402e-ad3e-ef01
 
 export default function Index() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    let animFrame: number
-    let t = 0
-
-    const resize = () => {
-      canvas.width = canvas.offsetWidth
-      canvas.height = canvas.offsetHeight
-    }
-    resize()
-    window.addEventListener("resize", resize)
-
-    // BMW M3 approximate contour path points (normalized 0-1)
-    const carPath = [
-      // front bumper bottom
-      { x: 0.18, y: 0.82 },
-      { x: 0.20, y: 0.78 },
-      { x: 0.22, y: 0.72 },
-      // hood slope up
-      { x: 0.26, y: 0.60 },
-      { x: 0.30, y: 0.52 },
-      { x: 0.34, y: 0.46 },
-      // windshield
-      { x: 0.38, y: 0.38 },
-      { x: 0.42, y: 0.33 },
-      // roof
-      { x: 0.48, y: 0.30 },
-      { x: 0.54, y: 0.29 },
-      { x: 0.60, y: 0.30 },
-      { x: 0.64, y: 0.32 },
-      // rear window
-      { x: 0.68, y: 0.36 },
-      { x: 0.72, y: 0.43 },
-      // trunk
-      { x: 0.75, y: 0.50 },
-      { x: 0.77, y: 0.56 },
-      // rear bumper
-      { x: 0.79, y: 0.62 },
-      { x: 0.81, y: 0.70 },
-      { x: 0.82, y: 0.78 },
-      { x: 0.82, y: 0.82 },
-      // bottom rear to front (undercarriage)
-      { x: 0.78, y: 0.86 },
-      { x: 0.74, y: 0.88 },
-      // rear wheel arch
-      { x: 0.70, y: 0.90 },
-      { x: 0.66, y: 0.88 },
-      { x: 0.62, y: 0.86 },
-      // middle bottom
-      { x: 0.55, y: 0.85 },
-      { x: 0.48, y: 0.85 },
-      { x: 0.40, y: 0.86 },
-      // front wheel arch
-      { x: 0.36, y: 0.88 },
-      { x: 0.32, y: 0.90 },
-      { x: 0.28, y: 0.88 },
-      { x: 0.24, y: 0.86 },
-      // back to front
-      { x: 0.20, y: 0.84 },
-      { x: 0.18, y: 0.82 },
-    ]
-
-    function getPathLength(path: typeof carPath) {
-      let len = 0
-      for (let i = 1; i < path.length; i++) {
-        const dx = path[i].x - path[i - 1].x
-        const dy = path[i].y - path[i - 1].y
-        len += Math.sqrt(dx * dx + dy * dy)
-      }
-      return len
-    }
-
-    function getPointAtDistance(path: typeof carPath, dist: number) {
-      let traveled = 0
-      for (let i = 1; i < path.length; i++) {
-        const dx = path[i].x - path[i - 1].x
-        const dy = path[i].y - path[i - 1].y
-        const seg = Math.sqrt(dx * dx + dy * dy)
-        if (traveled + seg >= dist) {
-          const frac = (dist - traveled) / seg
-          return {
-            x: path[i - 1].x + dx * frac,
-            y: path[i - 1].y + dy * frac,
-          }
-        }
-        traveled += seg
-      }
-      return path[path.length - 1]
-    }
-
-    const totalLen = getPathLength(carPath)
-
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      const w = canvas.width
-      const h = canvas.height
-
-      // Draw car contour line with dim glow base
-      ctx.beginPath()
-      ctx.moveTo(carPath[0].x * w, carPath[0].y * h)
-      for (let i = 1; i < carPath.length; i++) {
-        ctx.lineTo(carPath[i].x * w, carPath[i].y * h)
-      }
-      ctx.strokeStyle = "rgba(160, 80, 255, 0.18)"
-      ctx.lineWidth = 2
-      ctx.stroke()
-
-      // Animated bright orb along contour
-      const progress = (t % 1)
-      const orbDist = progress * totalLen
-
-      // Draw trailing glow
-      const trailLen = 0.18
-      const steps = 60
-      for (let s = 0; s <= steps; s++) {
-        const frac = s / steps
-        const d = ((orbDist - frac * trailLen * totalLen) + totalLen) % totalLen
-        const pt = getPointAtDistance(carPath, d)
-        const alpha = frac * (1 - frac * 0.3)
-        const brightness = frac > 0.85 ? 1 : frac
-
-        const r = Math.round(180 + brightness * 75)
-        const g = Math.round(50 + brightness * 30)
-        const b = Math.round(255)
-
-        ctx.beginPath()
-        ctx.arc(pt.x * w, pt.y * h, 1.5 + brightness * 3, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.9})`
-        ctx.fill()
-      }
-
-      // Main bright orb head
-      const orbPt = getPointAtDistance(carPath, orbDist)
-      const grd = ctx.createRadialGradient(orbPt.x * w, orbPt.y * h, 0, orbPt.x * w, orbPt.y * h, 28)
-      grd.addColorStop(0, "rgba(255, 200, 255, 1)")
-      grd.addColorStop(0.2, "rgba(200, 100, 255, 0.9)")
-      grd.addColorStop(0.5, "rgba(140, 40, 255, 0.5)")
-      grd.addColorStop(1, "rgba(100, 0, 200, 0)")
-      ctx.beginPath()
-      ctx.arc(orbPt.x * w, orbPt.y * h, 28, 0, Math.PI * 2)
-      ctx.fillStyle = grd
-      ctx.fill()
-
-      // Bright core
-      ctx.beginPath()
-      ctx.arc(orbPt.x * w, orbPt.y * h, 4, 0, Math.PI * 2)
-      ctx.fillStyle = "rgba(255, 240, 255, 1)"
-      ctx.fill()
-
-      t += 0.003
-      animFrame = requestAnimationFrame(draw)
-    }
-
-    draw()
-
-    return () => {
-      cancelAnimationFrame(animFrame)
-      window.removeEventListener("resize", resize)
-    }
-  }, [])
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-black">
@@ -353,7 +187,7 @@ export default function Index() {
             </div>
           </div>
 
-          {/* BMW M3 — center, canvas overlay */}
+          {/* BMW M3 — center, SVG contour overlay */}
           <div className="relative mx-auto" style={{ width: "68%", maxWidth: 600, marginLeft: "auto", marginRight: "auto" }}>
             <img
               src={CAR_IMG}
@@ -364,12 +198,208 @@ export default function Index() {
                 filter: "brightness(0.95) saturate(1.1)",
               }}
             />
-            {/* Canvas for running light animation */}
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full rounded-2xl pointer-events-none"
+            {/* SVG running light animation along car contour */}
+            <svg
+              viewBox="0 0 600 400"
+              className="absolute inset-0 w-full h-full pointer-events-none"
               style={{ mixBlendMode: "screen" }}
-            />
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <defs>
+                <filter id="carGlow">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <filter id="carGlowStrong">
+                  <feGaussianBlur stdDeviation="6" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              {/* BMW M3 silhouette contour path — viewBox 600x400 */}
+              {/* Base dim contour */}
+              <path
+                id="carContour"
+                d="
+                  M 95 295
+                  L 100 270
+                  L 108 248
+                  L 120 228
+                  L 138 205
+                  L 158 188
+                  L 175 175
+                  L 195 162
+                  L 218 148
+                  L 248 138
+                  L 278 133
+                  L 308 132
+                  L 335 133
+                  L 358 138
+                  L 378 145
+                  L 396 155
+                  L 412 168
+                  L 424 180
+                  L 432 192
+                  L 438 205
+                  L 442 220
+                  L 445 238
+                  L 448 258
+                  L 450 278
+                  L 452 295
+                  L 448 308
+                  L 435 318
+                  L 418 322
+                  L 400 320
+                  C 392 318 385 308 382 298
+                  C 378 282 376 265 375 258
+                  L 310 255
+                  L 240 255
+                  L 195 258
+                  C 194 265 192 280 188 296
+                  C 185 308 178 318 170 321
+                  L 152 323
+                  L 134 320
+                  L 118 312
+                  L 105 303
+                  Z
+                "
+                fill="none"
+                stroke="rgba(160,80,255,0.15)"
+                strokeWidth="1.5"
+              />
+
+              {/* Animated running orb — dash trick */}
+              <path
+                d="
+                  M 95 295
+                  L 100 270
+                  L 108 248
+                  L 120 228
+                  L 138 205
+                  L 158 188
+                  L 175 175
+                  L 195 162
+                  L 218 148
+                  L 248 138
+                  L 278 133
+                  L 308 132
+                  L 335 133
+                  L 358 138
+                  L 378 145
+                  L 396 155
+                  L 412 168
+                  L 424 180
+                  L 432 192
+                  L 438 205
+                  L 442 220
+                  L 445 238
+                  L 448 258
+                  L 450 278
+                  L 452 295
+                  L 448 308
+                  L 435 318
+                  L 418 322
+                  L 400 320
+                  C 392 318 385 308 382 298
+                  C 378 282 376 265 375 258
+                  L 310 255
+                  L 240 255
+                  L 195 258
+                  C 194 265 192 280 188 296
+                  C 185 308 178 318 170 321
+                  L 152 323
+                  L 134 320
+                  L 118 312
+                  L 105 303
+                  Z
+                "
+                fill="none"
+                stroke="rgba(220,160,255,0.6)"
+                strokeWidth="2"
+                strokeDasharray="60 9999"
+                strokeDashoffset="0"
+                filter="url(#carGlow)"
+                strokeLinecap="round"
+              >
+                <animate
+                  attributeName="stroke-dashoffset"
+                  from="0"
+                  to="-1200"
+                  dur="4s"
+                  repeatCount="indefinite"
+                />
+              </path>
+
+              {/* Bright orb head */}
+              <path
+                d="
+                  M 95 295
+                  L 100 270
+                  L 108 248
+                  L 120 228
+                  L 138 205
+                  L 158 188
+                  L 175 175
+                  L 195 162
+                  L 218 148
+                  L 248 138
+                  L 278 133
+                  L 308 132
+                  L 335 133
+                  L 358 138
+                  L 378 145
+                  L 396 155
+                  L 412 168
+                  L 424 180
+                  L 432 192
+                  L 438 205
+                  L 442 220
+                  L 445 238
+                  L 448 258
+                  L 450 278
+                  L 452 295
+                  L 448 308
+                  L 435 318
+                  L 418 322
+                  L 400 320
+                  C 392 318 385 308 382 298
+                  C 378 282 376 265 375 258
+                  L 310 255
+                  L 240 255
+                  L 195 258
+                  C 194 265 192 280 188 296
+                  C 185 308 178 318 170 321
+                  L 152 323
+                  L 134 320
+                  L 118 312
+                  L 105 303
+                  Z
+                "
+                fill="none"
+                stroke="white"
+                strokeWidth="3"
+                strokeDasharray="8 9999"
+                strokeDashoffset="0"
+                filter="url(#carGlowStrong)"
+                strokeLinecap="round"
+              >
+                <animate
+                  attributeName="stroke-dashoffset"
+                  from="0"
+                  to="-1200"
+                  dur="4s"
+                  repeatCount="indefinite"
+                />
+              </path>
+            </svg>
           </div>
 
           {/* Money fan — right side */}
